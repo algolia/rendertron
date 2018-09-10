@@ -7,6 +7,7 @@ import * as koaSend from 'koa-send';
 import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 import * as url from 'url';
+import { URL } from 'url';
 
 import {Renderer} from './renderer';
 
@@ -78,10 +79,19 @@ export class Rendertron {
     return false;
   }
 
+  transformUrl(href: string) {
+    if (process.env.USE_DOCKER_LOCALHOST !== 'true') return href;
+    const parsed = new URL(href);
+    const host = parsed.host || '';
+    parsed.host = host.replace(/^localhost(:|$)/, 'host.docker.internal$1');
+    return parsed.href || '';
+  }
+
   async handleRenderRequest(ctx: Koa.Context, url: string) {
     if (!this.renderer) {
       throw (new Error('No renderer initalized yet.'));
     }
+    url = this.transformUrl(url);
 
     if (this.restricted(url)) {
       ctx.status = 403;
@@ -98,6 +108,8 @@ export class Rendertron {
   }
 
   async handleScreenshotRequest(ctx: Koa.Context, url: string) {
+    url = this.transformUrl(url);
+
     if (!this.renderer) {
       throw (new Error('No renderer initalized yet.'));
     }

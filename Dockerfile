@@ -16,15 +16,27 @@ RUN apt-get update && apt-get install -y wget --no-install-recommends \
     && apt-get purge --auto-remove -y curl \
     && rm -rf /src/*.deb
 
-COPY . /app
-WORKDIR /app
+# It's a good idea to use dumb-init to help prevent zombie chrome processes.
+ADD https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64 /usr/local/bin/dumb-init
+RUN chmod +x /usr/local/bin/dumb-init
 
+COPY . /home/pptruser
+WORKDIR /home/pptruser
+
+# Add user so we don't need --no-sandbox.
+RUN groupadd -r pptruser \
+    && useradd -r -g pptruser pptruser \
+    && chown -R pptruser:pptruser /home/pptruser
+USER pptruser
+
+# Install dependencies
+RUN rm -rf node_modules
 RUN npm install || \
   ((if [ -f npm-debug.log ]; then \
       cat npm-debug.log; \
     fi) && false)
-
 RUN npm run build
 
-ENTRYPOINT [ "npm" ]
-CMD ["run", "start"]
+ENTRYPOINT ["dumb-init", "--"]
+
+CMD [ "npm", "run", "start"]
