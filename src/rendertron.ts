@@ -9,7 +9,7 @@ import * as puppeteer from 'puppeteer';
 import * as url from 'url';
 import { URL } from 'url';
 
-import {Renderer} from './renderer';
+import {Renderer, ScreenshotError} from './renderer';
 
 const CONFIG_PATH = path.resolve(__dirname, '../config.json');
 
@@ -70,7 +70,8 @@ export class Rendertron {
    * the requester to read the file system via Chrome.
    */
   restricted(href: string): boolean {
-    const protocol = url.parse(href).protocol || '';
+    const parsedUrl = url.parse(href);
+    const protocol = parsedUrl.protocol || '';
 
     if (!protocol.match(/^https?/)) {
       return true;
@@ -114,6 +115,11 @@ export class Rendertron {
       throw (new Error('No renderer initalized yet.'));
     }
 
+    if (this.restricted(url)) {
+      ctx.status = 403;
+      return;
+    }
+
     let options = undefined;
     if (ctx.method === 'POST' && ctx.request.body) {
       options = ctx.request.body;
@@ -126,11 +132,16 @@ export class Rendertron {
 
     const mobileVersion = 'mobile' in ctx.query ? true : false;
 
-    const img =
-        await this.renderer.screenshot(url, mobileVersion, dimensions, options);
-    ctx.set('Content-Type', 'image/jpeg');
-    ctx.set('Content-Length', img.length.toString());
-    ctx.body = img;
+    try {
+      const img = await this.renderer.screenshot(
+          url, mobileVersion, dimensions, options);
+      ctx.set('Content-Type', 'image/jpeg');
+      ctx.set('Content-Length', img.length.toString());
+      ctx.body = img;
+    } catch (error) {
+      const err = error as ScreenshotError;
+      ctx.status = err.type === 'Forbidden' ? 403 : 500;
+    }
   }
 }
 
